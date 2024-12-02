@@ -1,6 +1,6 @@
 import { ApolloServer } from "@apollo/server";
-import todoSchema from "../module/todo/todoSchema.js";
-import todoResolver from "../module/todo/todoResolver.js";
+import todoSchema from "../graphql/todo/todoSchema.js";
+import todoResolver from "../graphql/todo/todoResolver.js";
 
 const apolloServer = new ApolloServer({
     typeDefs: [todoSchema],
