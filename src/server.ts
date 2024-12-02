@@ -4,7 +4,10 @@ import apolloServer from "./config/apolloServer.js";
 import { expressMiddleware } from "@apollo/server/express4";
 import cors from "cors";
 import mqtt from 'mqtt';
+import { Point } from '@influxdata/influxdb-client'
 import 'dotenv/config'
+import { influxClient } from "./config/influxdb.js"
+import { getRandomNumber } from "./module/utils.js";
 
 const MQTT_TOPIC = "home/light"
 const options = {
@@ -15,7 +18,7 @@ const client = mqtt.connect(`mqtt://${process.env.MQTT_BROKER}`, options);
 
 client.on('connect', () => {
     console.log(`Connected to MQTT Broker: ${process.env.MQTT_BROKER}`)
-    
+
     // client.subscribe([MQTT_TOPIC], () => {
     //     console.log(`Subscribe to topic "${MQTT_TOPIC}"`)
     // })
@@ -77,6 +80,42 @@ app.get("/home/light/:mode", (req: Request, res: Response) => {
         message: `Turn ${modes[mode]} light.`
     });
 });
+
+app.get("/sensors/temperatures/:bucket", async (req: Request, res: Response) => {
+    const { bucket } = req.params
+    const queryApi = influxClient.getQueryApi("grandline")
+    const fluxQuery = `from(bucket:"${bucket}") |> range(start: 0) |> filter(fn: (r) => r._measurement == "temperature")`
+    const result = []
+    for await (const { values, tableMeta } of queryApi.iterateRows(fluxQuery)) {
+        const o = tableMeta.toObject(values)
+        console.log(
+            `${o._time} ${o._measurement} in '${o.location}' (${o.sensor_id}): ${o._field}=${o._value}`
+        )
+        result.push(o._value)
+    }
+    return res.json({
+        status: 200,
+        data: {
+            temperatures: result
+        }
+    });
+})
+
+app.post("/sensors/temperatures/:tempName/:tempVal", (req: Request, res: Response) => {
+    const { tempName, tempVal } = req.params
+    const writeApi = influxClient.getWriteApi("grandline", "storage")
+    const point = new Point('temperature')
+        .tag(`sensor_id`, tempName)
+        .floatField('value', getRandomNumber())
+
+    console.log(` ${point}`)
+    writeApi.writePoint(point)
+
+    return res.json({
+        status: 200,
+        message: `Write point ${point}`
+    });
+})
 
 startApolloServer()
 
